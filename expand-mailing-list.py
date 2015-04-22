@@ -25,7 +25,6 @@ import os
 import sys
 import string
 import ldap
-import logging
 import getpass
 from argparse import ArgumentParser
 
