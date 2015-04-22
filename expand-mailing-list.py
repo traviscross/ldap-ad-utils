@@ -8,46 +8,41 @@ import logging
 import getpass
 from argparse import ArgumentParser
 
+def search_for_ddlists(ldap_conn, dn):
+    return ldap_conn.search_s(dn,
+                              ldap.SCOPE_BASE,
+                              filterstr='(objectclass=msExchDynamicDistributionList)',
+                              attrlist=['msExchDynamicDLBaseDN',
+                                        'msExchDynamicDLFilter'])
+
+def search_ddlist(ldap_conn, list_attrs):
+    dyn_base_dn = list_attrs['msExchDynamicDLBaseDN'][0]
+    dyn_filter = list_attrs['msExchDynamicDLFilter'][0]
+    return ldap_conn.search_s(dyn_base_dn,
+                              ldap.SCOPE_SUBTREE,
+                              filterstr=dyn_filter,
+                              attrlist=[])
+
 # Find DNs that are of objecttype msExchDynamicDistributionList,
 # get their filters, and expand them to more DNs
 def expand_dyn_list(ldap_conn, dn_list):
     expanded_dns = []
-    attrlist = ['msExchDynamicDLBaseDN', 'msExchDynamicDLFilter']
-
     for base_dn in dn_list:
-        results = ldap_conn.search_s(base_dn,
-                                     ldap.SCOPE_BASE,
-                                     filterstr='(objectclass=msExchDynamicDistributionList)',
-                                     attrlist=attrlist)
+        results = search_for_ddlists(ldap_conn, base_dn)
         if results == None or len(results) == 0:
             #print '{} is not a mailing list, append'.format(base_dn)
             expanded_dns.append(base_dn)
         else:
             #print '{} is a mailing list, results: {}'.format(base_dn, results)
             for _, attrs in results:
-                dyn_base_dn = attrs['msExchDynamicDLBaseDN'][0]
-                dyn_filter = attrs['msExchDynamicDLFilter'][0]
-                dns = do_dyn_search(ldap_conn, dyn_base_dn, dyn_filter)
-                expanded_dns.extend(dns)
-
+                results = search_ddlist(ldap_conn, attrs)
+                if results != None and len(results) > 0:
+                    # Recursive call to expand any other mailing lists
+                    expanded_dns.extend(expand_dyn_list(ldap_conn, [dn for dn, _ in results]))
+                else:
+                    #print 'No people in DN {} matching filter {}'.format(dyn_base_dn, dyn_filter)
+                    pass
     return expanded_dns
-
-
-def do_dyn_search(ldap_conn, base_dn, filterstr):
-    results = ldap_conn.search_s(base_dn,
-                                 ldap.SCOPE_SUBTREE,
-                                 filterstr=filterstr,
-                                 attrlist=[])
-
-    if results != None and len(results) > 0:
-        dns = [dn for dn, _ in results]
-        # Recursive call to expand any other mailing lists
-        expanded = expand_dyn_list(ldap_conn, dns)
-    else:
-        #print 'No people in DN {} matching filter {}'.format(base_dn, filterstr)
-        expanded = []
-
-    return expanded
 
 def run(args):
     ldap_opts = {
