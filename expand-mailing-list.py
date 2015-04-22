@@ -72,24 +72,18 @@ def run(args):
         ldap.OPT_PROTOCOL_VERSION: 3,
         ldap.OPT_REFERRALS: 1 # Yes, chase referrals
         }
-
     ldap_conn = ldap.initialize(args.ldap_uri, trace_level=args.trace_level)
-
     for opt, val in ldap_opts.items():
         ldap_conn.set_option(opt, val)
-
     ldap_conn.simple_bind_s(args.bind_dn, args.password)
     base_dn = args.mailing_list_dn
     #print 'Searching {}'.format(base_dn)
-
     dns = expand_dn(ldap_conn, base_dn)
-
     if dns != None and len(dns) > 0:
         for dn in sorted(set(dns)):
             result = ldap_conn.search_s(dn,
                                         ldap.SCOPE_SUBTREE,
                                         attrlist=['cn'])
-
             if result != None:
                 (_, attrs) = result[0]
                 print attrs['cn'][0]
@@ -98,10 +92,8 @@ def run(args):
     else:
         print 'No results returned'
 
-
 def parse_args():
     argp = ArgumentParser()
-
     # Output verbosity options.
     argp.add_argument('-q', '--quiet', help='No tracing (default)',
                       action='store_const', dest='trace_level',
@@ -115,40 +107,27 @@ def parse_args():
     argp.add_argument('-9', '--very-verbose', help='Trace method maxmimum level',
                       action='store_const', dest='trace_level',
                       const=9, default=0)
-
     argp.add_argument('-D', '--bind-dn', dest='bind_dn',
                       help='LDAP bind DN (e.g. john@example.com)')
-
     argp.add_argument('-w', '--password', dest='password',
                       help='LDAP bind password')
-
     argp.add_argument('-H', '--ldap-uri', dest='ldap_uri',
                       help='LDAP URI to use (e.g. ldaps://ad.example.com)')
-
     argp.add_argument('-M', '--mailing-list-dn',
                       dest='mailing_list_dn',
                       help='DN of the mailing list (e.g. CN=Example List,CN=Users,DC=example,DC=com)')
-
     return argp.parse_args()
 
-
-
 if __name__ == '__main__':
-
     args = parse_args()
-
     if args.bind_dn is None:
         args.bind_dn = raw_input("Bind DN: ")
-
     if args.password is None:
         args.password = getpass.getpass("LDAP password: ")
-
     if args.ldap_uri is None:
         args.ldap_uri = raw_input("LDAP URI: ")
-
     if args.mailing_list_dn is None:
         args.mailing_list_dn = raw_input("Mailing list DN: ")
-
     run(args)
 
 # vim: ts=4 sts=4 sw=4 et si:
