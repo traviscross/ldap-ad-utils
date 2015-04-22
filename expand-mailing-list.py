@@ -83,10 +83,10 @@ def run(args):
         for dn in sorted(set(dns)):
             result = ldap_conn.search_s(dn,
                                         ldap.SCOPE_SUBTREE,
-                                        attrlist=['cn'])
+                                        attrlist=['cn','mail'])
             if result != None:
                 (_, attrs) = result[0]
-                print attrs['cn'][0]
+                print attrs['cn'][0] + ' <' + attrs['mail'][0] + '>'
             else:
                 print 'DN {} not found'.format(dn)
     else:
