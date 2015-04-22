@@ -23,26 +23,49 @@ def search_ddlist(ldap_conn, list_attrs):
                               filterstr=dyn_filter,
                               attrlist=[])
 
-# Find DNs that are of objecttype msExchDynamicDistributionList,
-# get their filters, and expand them to more DNs
-def expand_dyn_list(ldap_conn, dn_list):
-    expanded_dns = []
-    for base_dn in dn_list:
-        results = search_for_ddlists(ldap_conn, base_dn)
-        if results == None or len(results) == 0:
-            #print '{} is not a mailing list, append'.format(base_dn)
-            expanded_dns.append(base_dn)
-        else:
-            #print '{} is a mailing list, results: {}'.format(base_dn, results)
-            for _, attrs in results:
-                results = search_ddlist(ldap_conn, attrs)
-                if results != None and len(results) > 0:
-                    # Recursive call to expand any other mailing lists
-                    expanded_dns.extend(expand_dyn_list(ldap_conn, [dn for dn, _ in results]))
-                else:
-                    #print 'No people in DN {} matching filter {}'.format(dyn_base_dn, dyn_filter)
-                    pass
-    return expanded_dns
+def search_for_groups(ldap_conn, dn):
+    return ldap_conn.search_s(dn,
+                              ldap.SCOPE_BASE,
+                              filterstr='(objectclass=group)',
+                              attrlist=['member'])
+
+def expand_group(ldap_conn, dn):
+    #print 'Expanding group {}'.format(dn)
+    dns = []
+    results = search_for_groups(ldap_conn, dn)
+    if results != None:
+        for _, attrs in results:
+            if attrs['member'] != None:
+                for member in attrs['member']:
+                    dns.extend(expand_dn(ldap_conn,member))
+    return dns
+
+def expand_ddlist(ldap_conn, dn):
+    #print 'Expanding ddlist {}'.format(dn)
+    dns = []
+    results = search_for_ddlists(ldap_conn, dn)
+    if results != None:
+        for _, attrs in results:
+            results = search_ddlist(ldap_conn, attrs)
+            if results != None:
+                for dn, _ in results:
+                    dns.extend(expand_dn(ldap_conn, dn))
+    return dns
+
+def expand_dn(ldap_conn, dn):
+    #print 'Expanding dn {}'.format(dn)
+    dns = []
+    results = ldap_conn.search_s(dn, ldap.SCOPE_BASE, attrlist=['objectclass'])
+    if results != None:
+        for _, attrs in results:
+            cs = attrs['objectClass']
+            if 'group' in cs:
+                dns.extend(expand_group(ldap_conn, dn))
+            elif 'msExchDynamicDistributionList' in cs:
+                dns.extend(expand_ddlist(ldap_conn, dn))
+            else:
+                dns.append(dn)
+    return dns
 
 def run(args):
     ldap_opts = {
@@ -59,23 +82,9 @@ def run(args):
     base_dn = args.mailing_list_dn
     #print 'Searching {}'.format(base_dn)
 
-    try:
-        results = ldap_conn.search_s(base_dn,
-                                     ldap.SCOPE_BASE,
-                                     filterstr='(objectclass=group)',
-                                     attrlist=['member'])
-    except Exception as exc:
-        print 'Search exception: {}'.format(exc)
-        sys.exit(1)
+    dns = expand_dn(ldap_conn, base_dn)
 
-    dns = []
-
-    if results != None and len(results) > 0:
-        for _, attrs in results:
-            members = attrs['member']
-            #print 'Members: {}'.format(members)
-            dns.extend(expand_dyn_list(ldap_conn, members))
-
+    if dns != None and len(dns) > 0:
         for dn in sorted(set(dns)):
             result = ldap_conn.search_s(dn,
                                         ldap.SCOPE_SUBTREE,
