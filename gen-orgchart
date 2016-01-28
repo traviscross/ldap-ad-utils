@@ -393,8 +393,10 @@ def main(**kwargs):
     ldap_opts = {
         ldap.OPT_PROTOCOL_VERSION: 3,
         ldap.OPT_REFERRALS: 0,  # No, don't chase referrals
-        ldap.OPT_NETWORK_TIMEOUT: timeout,
     }
+
+    if timeout >= 0:
+        ldap_opts[ldap.OPT_NETWORK_TIMEOUT] = timeout
 
     filters = {
         "displayName": (None, "=", "*"),
