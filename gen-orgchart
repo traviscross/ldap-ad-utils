@@ -23,10 +23,7 @@
 
 """
 Usage:
-  gen-orgchart [--binddn=BINDDN] [--debug] [--output=OUTFILE]
-               [--password=BINDPASSWORD | --askpass] [--schema=SCHEMA]
-               [--timeout=TIMEOUT] [--trace-level=TRACELEVEL]
-               [--verbose] <ldapuri> <basedn>
+  gen-orgchart [options] <ldapuri> <basedn>
   gen-orgchart -h | --help | -V | --version
 
 Generate an org chart in Graphviz DOT output format.
@@ -68,60 +65,49 @@ Options:
 
 import contextlib
 import ldif
-import os
 import re
 import sys
-import textwrap
 
 from getpass import getpass
 
 try:
-    import docopt
+    from docopt import docopt
 except ImportError:
     exit('This program requires that the `docopt` library'
          ' is installed: \n    pip install docopt\n'
          'https://pypi.python.org/pypi/docopt/')
 
-from docopt import docopt
-
 try:
-    import jinja2
+    from jinja2 import Environment
 except ImportError:
     exit('This program requires that the `jinja2` library'
          ' is installed: \n    pip install jinja2\n'
          'http://pypi.python.org/pypi/jinja2/')
 
-from jinja2 import Template, Environment
-
 try:
     import ldap
+    from ldap.controls.libldap import SimplePagedResultsControl
 except ImportError:
     exit('This program requires that the `python-ldap` library'
          ' is installed: \n    pip install python-ldap\n'
          'http://pypi.python.org/pypi/python-ldap/')
 
-from ldap import modlist
-from ldap.controls.libldap import SimplePagedResultsControl
-
 reload(sys)
 sys.setdefaultencoding("utf-8")
 
-"""
-To canonicalize LDAP attributes.
-"""
+# To canonicalize LDAP attributes.
+
 #   From                          To
-MAP_ATTRS =  {
-    "department":      "departmentNumber",
-    "comment":         "description",
-    "company":         "o",
-    "employeeID":      "employeeNumber",
-    "thumbnailPhoto":  "jpegPhoto",
-    "streetaddress":   "street",
+MAP_ATTRS = {
+    "department": "departmentNumber",
+    "comment": "description",
+    "company": "o",
+    "employeeID": "employeeNumber",
+    "thumbnailPhoto": "jpegPhoto",
+    "streetaddress": "street",
 }
 
-"""
-Jinja2 orgchart template string
-"""
+# Jinja2 orgchart template string
 
 ORGCHART_TEMPLATE_STR = """
 strict graph orgchart {
@@ -217,7 +203,7 @@ def filters_to_ldapfilter(filters):
 def save_result(output, result):
     ldif_writer = ldif.LDIFWriter(output)
     for dn, entry in result:
-        if dn != None:
+        if dn is not None:
             ldif_writer.unparse(dn, entry)
 
 
@@ -235,7 +221,7 @@ def result_to_org(result0, preprocess=None):
         result = result0
 
     for dn, entry in result:
-        if dn != None:
+        if dn is not None:
             canonicalize_attrs(entry, MAP_ATTRS)
             display_name[dn] = attr_s(entry, "displayName")
             title = attr_s(entry, "title")
@@ -245,7 +231,6 @@ def result_to_org(result0, preprocess=None):
                 mgr_of[dn] = mgr
                 reports_to.setdefault(mgr, []).append(dn)
 
-            o = attr_s(entry, "o")
             dept = attr_s(entry, "departmentNumber")
 
             if dept:
@@ -256,7 +241,7 @@ def result_to_org(result0, preprocess=None):
 
     return {
             "reports_to": reports_to,
-            "depts" : depts,
+            "depts": depts,
             "dept_of": dept_of,
             "title_of": title_of,
             "mgr_of": mgr_of,
@@ -361,7 +346,7 @@ def get_attrlist_filterstr(schema_name, filters):
         filters["userAccountControl:1.2.840.113556.1.4.803:"] = ("!", "=", "2")
         attrstr = 'dn displayname title manager company department'
     else:
-        raise ValueError, 'Unsupported schema "{}"'.format(schema)
+        raise ValueError('Unsupported schema "{}"'.format(schema_name))
 
     return (attrstr.split(), filters_to_ldapfilter(filters))
 
@@ -399,20 +384,21 @@ def main(**kwargs):
     trace_level = int(kwargs["--trace-level"])
     timeout = int(kwargs["--timeout"])
 
-    if debug: print 'askpass: {}'.format(askpass)
+    if debug:
+        print 'askpass: {}'.format(askpass)
 
     if askpass:
         password = getpass("Bind password: ")
 
     ldap_opts = {
         ldap.OPT_PROTOCOL_VERSION: 3,
-        ldap.OPT_REFERRALS: 0, # No, don't chase referrals
+        ldap.OPT_REFERRALS: 0,  # No, don't chase referrals
         ldap.OPT_NETWORK_TIMEOUT: timeout,
     }
 
     filters = {
         "displayName": (None, "=", "*"),
-        "title":       (None, "=", "*"),
+        "title": (None, "=", "*"),
     }
 
     attrlist, filterstr = get_attrlist_filterstr(schema, filters)
@@ -438,7 +424,7 @@ def main(**kwargs):
     except ldap.LDAPError as e:
         sys.exit(ldap_errmsg(e))
 
-    if result != None:
+    if result is not None:
         with smart_open(output_file) as f:
             gen_orgchart(f, result_to_org(result), ORGCHART_TEMPLATE_STR)
 
